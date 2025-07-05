@@ -40,13 +40,14 @@ typedef enum {
   MM_REGEX = 1,
   MM_GLOB = 2,
   MM_FUZZY = 3,
-  MM_PREFIX = 4
+  MM_PREFIX = 4,
+  MM_PRIORITY = 5
 } MatchingMethod;
 
 /**
  * Possible sorting methods for listview.
  */
-typedef enum { SORT_NORMAL = 0, SORT_FZF = 1 } SortingMethod;
+typedef enum { SORT_NORMAL = 0, SORT_FZF = 1, SORT_PRIORITY = 2 } SortingMethod;
 
 /**
  * Settings structure holding all (static) configurable options.

@@ -264,6 +264,25 @@ char *rofi_latin_to_utf8_strdup(const char *input, gssize length);
  */
 int rofi_scorer_fuzzy_evaluate(const char *pattern, glong plen, const char *str,
                                glong slen);
+
+/**
+ * @param pattern      The user input to match against.
+ * @param plen         Pattern length.
+ * @param str          The input to match against pattern.
+ * @param slen         Length of str.
+ * @param original_pos Original position in menu for tie-breaking.
+ *
+ * Priority scorer that prioritizes matches on the left side of "-" separator.
+ * Scoring criteria:
+ * - Exact match on left side gets highest priority (lowest score)
+ * - Partial match on left side gets medium priority
+ * - Match on right side gets lower priority
+ * - Original position is used for tie-breaking
+ *
+ * @returns the priority score (lower is better).
+ */
+int rofi_scorer_priority_evaluate(const char *pattern, glong plen, const char *str,
+                                  glong slen, int original_pos);
 /*@}*/
 
 /**

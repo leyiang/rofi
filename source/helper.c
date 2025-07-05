@@ -175,6 +175,13 @@ static gchar *prefix_regex(const char *input) {
   return retv;
 }
 
+static gchar *priority_regex(const char *input) {
+  gchar *r = g_regex_escape_string(input, -1);
+  char *retv = g_strconcat("^", r, NULL);
+  g_free(r);
+  return retv;
+}
+
 static char *utf8_helper_simplify_string(const char *s) {
   gunichar buf2[G_UNICHAR_MAX_DECOMPOSITION_LENGTH] = {
       0,
@@ -248,6 +255,11 @@ static rofi_int_matcher *create_regex(const char *input, int case_sensitive) {
     break;
   case MM_PREFIX:
     r = prefix_regex(input);
+    retv = R(r, case_sensitive);
+    g_free(r);
+    break;
+  case MM_PRIORITY:
+    r = priority_regex(input);
     retv = R(r, case_sensitive);
     g_free(r);
     break;
@@ -656,11 +668,13 @@ int config_sanity_check(void) {
       config.sorting_method_enum = SORT_NORMAL;
     } else if (g_strcmp0(config.sorting_method, "fzf") == 0) {
       config.sorting_method_enum = SORT_FZF;
+    } else if (g_strcmp0(config.sorting_method, "priority") == 0) {
+      config.sorting_method_enum = SORT_PRIORITY;
     } else {
       g_string_append_printf(
           msg,
           "\t<b>config.sorting_method</b>=%s is not a valid sorting "
-          "strategy.\nValid options are: normal or fzf.\n",
+          "strategy.\nValid options are: normal, fzf or priority.\n",
           config.sorting_method);
       found_error = 1;
     }
@@ -678,11 +692,13 @@ int config_sanity_check(void) {
       ;
     } else if (g_strcmp0(config.matching, "prefix") == 0) {
       config.matching_method = MM_PREFIX;
+    } else if (g_strcmp0(config.matching, "priority") == 0) {
+      config.matching_method = MM_PRIORITY;
     } else {
       g_string_append_printf(msg,
                              "\t<b>config.matching</b>=%s is not a valid "
                              "matching strategy.\nValid options are: glob, "
-                             "regex, fuzzy, prefix or normal.\n",
+                             "regex, fuzzy, prefix, priority or normal.\n",
                              config.matching);
       found_error = 1;
     }
@@ -975,6 +991,55 @@ int rofi_scorer_fuzzy_evaluate(const char *pattern, glong plen, const char *str,
   g_free(score);
   g_free(dp);
   return -lefts;
+}
+
+/**
+ * Priority scorer that prioritizes matches on the left side of "-"
+ * 
+ * @param pattern The search pattern
+ * @param plen    Length of pattern  
+ * @param str     The string to evaluate
+ * @param slen    Length of string
+ * @param original_pos Original position in menu (for tie-breaking)
+ * 
+ * @returns Priority score (lower is better)
+ */
+int rofi_scorer_priority_evaluate(const char *pattern, glong plen, const char *str,
+                                  glong slen, int original_pos) {
+  // Find the position of " - " in the string
+  const char *separator = strstr(str, " - ");
+  if (separator == NULL) {
+    // No separator found, treat as normal string
+    // Use levenshtein distance + original position bias
+    return levenshtein(pattern, plen, str, slen) + (original_pos * 100);
+  }
+  
+  // Extract left side (before " - ")
+  size_t left_len = separator - str;
+  char *left_side = g_strndup(str, left_len);
+  
+  // Check for exact match on left side
+  if (g_strcmp0(pattern, left_side) == 0) {
+    g_free(left_side);
+    return original_pos; // Highest priority: exact match + position
+  }
+  
+  // Check if pattern is contained in left side
+  if (strstr(left_side, pattern) != NULL) {
+    g_free(left_side);
+    return 1000 + original_pos; // Medium priority: left side contains pattern
+  }
+  
+  g_free(left_side);
+  
+  // Check if pattern matches in right side (after " - ")
+  const char *right_side = separator + 3; // Skip " - "
+  if (strstr(right_side, pattern) != NULL) {
+    return 10000 + original_pos; // Lower priority: right side match
+  }
+  
+  // No match found
+  return 100000 + original_pos; // Lowest priority
 }
 
 /**

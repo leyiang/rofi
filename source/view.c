@@ -1215,6 +1215,10 @@ static void rofi_view_trigger_global_action(KeyBindingAction action) {
       rofi_view_input_changed();
     } else if (rc == 2) {
       // Movement.
+    } else if (rc == 3) {
+      // Backspace on empty input - exit with special code
+      state->retv = MENU_BACKSPACE_EXIT;
+      state->quit = TRUE;
     }
     break;
   }

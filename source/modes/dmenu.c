@@ -913,6 +913,11 @@ static void dmenu_finalize(RofiViewState *state) {
     restart = FALSE;
     retv = 10 + (mretv & MENU_LOWER_MASK);
   }
+  // Backspace on empty input
+  else if ((mretv & MENU_BACKSPACE_EXIT)) {
+    restart = FALSE;
+    retv = 12; // Custom exit code for backspace on empty input (must be >= 10)
+  }
   g_free(input);
   if (restart) {
     rofi_view_restart(state);

@@ -816,12 +816,15 @@ static void textbox_cursor_del(textbox *tb) {
  * @param tb Handle to the textbox
  *
  * Delete character before cursor.
+ * @return 1 if character was deleted, 0 if input was empty
  */
-static void textbox_cursor_bkspc(textbox *tb) {
+static int textbox_cursor_bkspc(textbox *tb) {
   if (tb && tb->cursor > 0) {
     textbox_cursor_dec(tb);
     textbox_cursor_del(tb);
+    return 1;
   }
+  return 0;
 }
 static void textbox_cursor_bkspc_word(textbox *tb) {
   if (tb && tb->cursor > 0) {
@@ -916,8 +919,11 @@ int textbox_keybinding(textbox *tb, KeyBindingAction action) {
     return 2;
   // BackSpace, Shift-BackSpace, Ctrl-h
   case REMOVE_CHAR_BACK:
-    textbox_cursor_bkspc(tb);
-    return 1;
+    if (textbox_cursor_bkspc(tb)) {
+      return 1;
+    } else {
+      return 3; // Special code for empty input backspace
+    }
   default:
     g_return_val_if_reached(0);
   }

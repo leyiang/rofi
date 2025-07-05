@@ -88,6 +88,8 @@ typedef enum {
   MENU_COMPLETE = 0x01000000,
   /** Bindings specifics */
   MENU_CUSTOM_ACTION = 0x10000000,
+  /** User pressed backspace on empty input */
+  MENU_BACKSPACE_EXIT = 0x20000000,
   /** Mask */
   MENU_LOWER_MASK = 0x0000FFFF
 } MenuReturn;

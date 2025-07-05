@@ -127,6 +127,10 @@ ModeMode mode_result(Mode *mode, int menu_retv, char **input,
   if (menu_retv & MENU_QUICK_SWITCH) {
     return menu_retv & MENU_LOWER_MASK;
   }
+  if (menu_retv & MENU_BACKSPACE_EXIT) {
+    rofi_set_return_code(12); // Custom exit code for backspace on empty input
+    return MODE_EXIT;
+  }
 
   g_assert(mode != NULL);
   g_assert(mode->_result != NULL);

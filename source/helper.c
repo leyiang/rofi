@@ -55,7 +55,7 @@
 #include <unistd.h>
 
 const char *const MatchingMethodStr[MM_NUM_MATCHERS] = {
-    "Normal", "Regex", "Glob", "Fuzzy", "Prefix"};
+    "Normal", "Regex", "Glob", "Fuzzy", "Prefix", "Priority"};
 
 static int MatchingMethodEnabled[MM_NUM_MATCHERS] = {
     MM_NORMAL,
@@ -202,18 +202,25 @@ static gchar *prefix_regex(const char *input) {
   return retv;
 }
 
-static char *utf8_helper_simplify_string(const char *os) {
+static gchar *priority_regex(const char *input) {
+  gchar *r = g_regex_escape_string(input, -1);
+  char *retv = g_strconcat("^", r, NULL);
+  g_free(r);
+  return retv;
+}
+
+static char *utf8_helper_simplify_string(const char *s) {
   char buf[6] = {
       0,
   };
 
   // Normalize the string to a fully decomposed form, then filter out
   // mark/accent characters.
-  char *s = g_utf8_normalize(os, -1, G_NORMALIZE_ALL);
-  ssize_t str_size = (g_utf8_strlen(s, -1) * 6 + 2 + 1) * sizeof(char);
+  char *s_norm = g_utf8_normalize(s, -1, G_NORMALIZE_ALL);
+  ssize_t str_size = (g_utf8_strlen(s_norm, -1) * 6 + 2 + 1) * sizeof(char);
   char *str = g_malloc0(str_size);
   char *striter = str;
-  for (const char *iter = s; iter && *iter; iter = g_utf8_next_char(iter)) {
+  for (const char *iter = s_norm; iter && *iter; iter = g_utf8_next_char(iter)) {
     gunichar uc = g_utf8_get_char(iter);
     if (!g_unichar_ismark(uc)) {
       int l = g_unichar_to_utf8(uc, buf);
@@ -221,7 +228,7 @@ static char *utf8_helper_simplify_string(const char *os) {
       striter += l;
     }
   }
-  g_free(s);
+  g_free(s_norm);
 
   return str;
 }
@@ -271,6 +278,11 @@ static rofi_int_matcher *create_regex(const char *input, int case_sensitive) {
     break;
   case MM_PREFIX:
     r = prefix_regex(input);
+    retv = R(r, case_sensitive);
+    g_free(r);
+    break;
+  case MM_PRIORITY:
+    r = priority_regex(input);
     retv = R(r, case_sensitive);
     g_free(r);
     break;
@@ -680,11 +692,13 @@ int config_sanity_check(void) {
       config.sorting_method_enum = SORT_NORMAL;
     } else if (g_strcmp0(config.sorting_method, "fzf") == 0) {
       config.sorting_method_enum = SORT_FZF;
+    } else if (g_strcmp0(config.sorting_method, "priority") == 0) {
+      config.sorting_method_enum = SORT_PRIORITY;
     } else {
       g_string_append_printf(
           msg,
           "\t<b>config.sorting_method</b>=%s is not a valid sorting "
-          "strategy.\nValid options are: normal or fzf.\n",
+          "strategy.\nValid options are: normal, fzf or priority.\n",
           config.sorting_method);
       found_error = 1;
     }
@@ -718,7 +732,7 @@ int config_sanity_check(void) {
           g_string_append_printf(msg,
                                  "\t<b>config.matching</b>=%s is not a valid "
                                  "matching strategy.\nValid options are: glob, "
-                                 "regex, fuzzy, prefix or normal.\n",
+                                 "regex, fuzzy, prefix, priority or normal.\n",
                                  *str);
           found_error = 1;
         }
@@ -961,7 +975,7 @@ static int rofi_scorer_get_score_for(enum CharClass prev, enum CharClass curr) {
 }
 
 int rofi_scorer_fuzzy_evaluate(const char *pattern, glong plen, const char *str,
-                               glong slen, int case_sensitive) {
+                               glong slen, const int case_sensitive) {
   if (slen > FUZZY_SCORER_MAX_LENGTH) {
     return -MIN_SCORE;
   }
@@ -1017,6 +1031,55 @@ int rofi_scorer_fuzzy_evaluate(const char *pattern, glong plen, const char *str,
   g_free(score);
   g_free(dp);
   return -lefts;
+}
+
+/**
+ * Priority scorer that prioritizes matches on the left side of "-"
+ * 
+ * @param pattern The search pattern
+ * @param plen    Length of pattern  
+ * @param str     The string to evaluate
+ * @param slen    Length of string
+ * @param original_pos Original position in menu (for tie-breaking)
+ * 
+ * @returns Priority score (lower is better)
+ */
+int rofi_scorer_priority_evaluate(const char *pattern, glong plen, const char *str,
+                                  glong slen, int original_pos) {
+  // Find the position of " - " in the string
+  const char *separator = strstr(str, " - ");
+  if (separator == NULL) {
+    // No separator found, treat as normal string
+    // Use levenshtein distance + original position bias
+    return levenshtein(pattern, plen, str, slen, 0) + (original_pos * 100);
+  }
+  
+  // Extract left side (before " - ")
+  size_t left_len = separator - str;
+  char *left_side = g_strndup(str, left_len);
+  
+  // Check for exact match on left side
+  if (g_strcmp0(pattern, left_side) == 0) {
+    g_free(left_side);
+    return original_pos; // Highest priority: exact match + position
+  }
+  
+  // Check if pattern is contained in left side
+  if (strstr(left_side, pattern) != NULL) {
+    g_free(left_side);
+    return 1000 + original_pos; // Medium priority: left side contains pattern
+  }
+  
+  g_free(left_side);
+  
+  // Check if pattern matches in right side (after " - ")
+  const char *right_side = separator + 3; // Skip " - "
+  if (strstr(right_side, pattern) != NULL) {
+    return 10000 + original_pos; // Lower priority: right side match
+  }
+  
+  // No match found
+  return 100000 + original_pos; // Lowest priority
 }
 
 /**

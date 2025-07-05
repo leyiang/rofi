@@ -461,6 +461,10 @@ static void filter_elements(thread_state *ts,
           t->state->distance[i] = rofi_scorer_fuzzy_evaluate(
               t->pattern, t->plen, str, slen, t->state->case_sensitive);
           break;
+        case SORT_PRIORITY:
+          t->state->distance[i] =
+              rofi_scorer_priority_evaluate(t->pattern, t->plen, str, slen, i);
+          break;
         case SORT_NORMAL:
         default:
           t->state->distance[i] = levenshtein(t->pattern, t->plen, str, slen,
